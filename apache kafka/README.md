@@ -3,6 +3,7 @@
 A production-ready local development environment running the full **Confluent Platform 7.6** with a lightweight **Kafka UI** for visual management. Every service is health-checked and starts in the correct dependency order.
 
 ---
+
 <img width="1440" height="910" alt="image" src="https://github.com/user-attachments/assets/3f87314b-f00c-4ebf-96df-d31514830be2" />
 
 ## Architecture
@@ -246,6 +247,9 @@ Open browser → http://localhost:8080
 ## Real-World Data Flow: E-Commerce Order Pipeline
 
 How all the components work together when a customer places an order:
+
+<img width="1440" height="702" alt="image" src="https://github.com/user-attachments/assets/dbac1172-683f-4454-9dbc-c5448d114554" />
+
 
 ```
 Customer places order
