@@ -1,0 +1,184 @@
+# Apache Druid - Complete Stack with Web UI
+# Access Druid Console at: http://localhost:8888
+name: druidstack
+
+x-druid-env: &druid-env
+  env_file:
+    - druid.env
+
+volumes:
+  metadata_data: {}
+  middle_var: {}
+  historical_var: {}
+  broker_var: {}
+  coordinator_var: {}
+  router_var: {}
+  druid_shared: {}
+  zookeeper_data: {}
+  postgres_data: {}
+
+networks:
+  druid-net:
+    driver: bridge
+
+services:
+
+  # ─── Infrastructure ──────────────────────────────────────────────────────────
+
+  postgres:
+    image: docker.io/library/postgres:15.17
+    pull_policy: never
+    restart: unless-stopped
+    networks:
+      - druid-net
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: druid
+      POSTGRES_USER: druid
+      POSTGRES_DB: druid
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U druid"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: zookeeper:3.8
+    pull_policy: never
+    restart: unless-stopped
+    networks:
+      - druid-net
+    volumes:
+      - zookeeper_data:/data
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: server.1=zookeeper:2888:3888;2181
+      ZOO_4LW_COMMANDS_WHITELIST: mntr,conf,ruok
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc -w 2 localhost 2181 | grep imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Master Services ──────────────────────────────────────────────────────────
+
+  coordinator:
+    image: apache/druid:30.0.0
+    platform: linux/amd64
+    restart: unless-stopped
+    networks:
+      - druid-net
+    volumes:
+      - druid_shared:/opt/shared
+      - coordinator_var:/opt/druid/var
+      - ./conf/druid:/opt/druid/conf/druid/cluster
+    depends_on:
+      postgres:
+        condition: service_healthy
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    <<: *druid-env
+    command:
+      - coordinator
+
+  overlord:
+    image: apache/druid:30.0.0
+    platform: linux/amd64
+    restart: unless-stopped
+    networks:
+      - druid-net
+    volumes:
+      - druid_shared:/opt/shared
+      - middle_var:/opt/druid/var
+      - ./conf/druid:/opt/druid/conf/druid/cluster
+    depends_on:
+      postgres:
+        condition: service_healthy
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "8090:8090"
+    <<: *druid-env
+    command:
+      - overlord
+
+  # ─── Data Services ───────────────────────────────────────────────────────────
+
+  historical:
+    image: apache/druid:30.0.0
+    platform: linux/amd64
+    restart: unless-stopped
+    networks:
+      - druid-net
+    volumes:
+      - druid_shared:/opt/shared
+      - historical_var:/opt/druid/var
+      - ./conf/druid:/opt/druid/conf/druid/cluster
+    depends_on:
+      - coordinator
+    ports:
+      - "8083:8083"
+    <<: *druid-env
+    command:
+      - historical
+
+  middlemanager:
+    image: apache/druid:30.0.0
+    platform: linux/amd64
+    restart: unless-stopped
+    networks:
+      - druid-net
+    volumes:
+      - druid_shared:/opt/shared
+      - middle_var:/opt/druid/var
+      - ./conf/druid:/opt/druid/conf/druid/cluster
+    depends_on:
+      - overlord
+    ports:
+      - "8091:8091"
+    <<: *druid-env
+    command:
+      - middleManager
+
+  # ─── Query Services ───────────────────────────────────────────────────────────
+
+  broker:
+    image: apache/druid:30.0.0
+    platform: linux/amd64
+    restart: unless-stopped
+    networks:
+      - druid-net
+    volumes:
+      - druid_shared:/opt/shared
+      - broker_var:/opt/druid/var
+      - ./conf/druid:/opt/druid/conf/druid/cluster
+    depends_on:
+      - historical
+    ports:
+      - "8082:8082"
+    <<: *druid-env
+    command:
+      - broker
+
+  router:
+    image: apache/druid:30.0.0
+    platform: linux/amd64
+    restart: unless-stopped
+    networks:
+      - druid-net
+    volumes:
+      - druid_shared:/opt/shared
+      - router_var:/opt/druid/var
+      - ./conf/druid:/opt/druid/conf/druid/cluster
+    depends_on:
+      - broker
+      - coordinator
+      - overlord
+    ports:
+      - "8888:8888"   # ← Druid Console / Web UI
+    <<: *druid-env
+    command:
+      - router
