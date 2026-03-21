@@ -3,6 +3,7 @@
 A production-ready local development environment running the full **Confluent Platform 7.6** with a lightweight **Kafka UI** for visual management. Every service is health-checked and starts in the correct dependency order.
 
 ---
+<img width="1440" height="910" alt="image" src="https://github.com/user-attachments/assets/3f87314b-f00c-4ebf-96df-d31514830be2" />
 
 ## Architecture
 
