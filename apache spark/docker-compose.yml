@@ -1,0 +1,160 @@
+
+
+# ── Shared volume set ─────────────────────────────────────────────────────────
+x-spark-volumes: &spark-volumes
+  volumes:
+    - ./data:/opt/spark/data
+    - ./logs:/opt/spark/logs
+    - ./apps:/opt/spark/apps
+    - ./conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf
+
+# ── Shared environment ────────────────────────────────────────────────────────
+x-spark-env: &spark-env
+  SPARK_HOME: /opt/spark
+  SPARK_MASTER_URL: spark://spark-master:7077
+  SPARK_WORKER_MEMORY: 2G
+  SPARK_WORKER_CORES: "2"
+  SPARK_NO_DAEMONIZE: "true"
+  PYSPARK_PYTHON: python3
+
+services:
+
+  # ─── Spark Master ───────────────────────────────────────────────────────────
+  spark-master:
+    image: apache/spark:3.5.0
+    container_name: spark-master
+    hostname: spark-master
+    environment:
+      <<: *spark-env
+      SPARK_MASTER_HOST: spark-master
+      SPARK_MASTER_PORT: "7077"
+      SPARK_MASTER_WEBUI_PORT: "8080"
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.master.Master
+      --host spark-master
+      --port 7077
+      --webui-port 8080
+    ports:
+      - "8080:8080"   # Spark Master Web UI
+      - "7077:7077"   # Cluster connect port
+      - "4040:4040"   # Live Application UI (first running app)
+    <<: *spark-volumes
+    networks:
+      - spark-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # ─── Workers ────────────────────────────────────────────────────────────────
+  spark-worker-1:
+    image: apache/spark:3.5.0
+    container_name: spark-worker-1
+    hostname: spark-worker-1
+    environment:
+      <<: *spark-env
+      SPARK_WORKER_WEBUI_PORT: "8081"
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.worker.Worker
+      --webui-port 8081
+      spark://spark-master:7077
+    ports:
+      - "8081:8081"
+    <<: *spark-volumes
+    networks:
+      - spark-net
+    depends_on:
+      spark-master:
+        condition: service_healthy
+
+  spark-worker-2:
+    image: apache/spark:3.5.0
+    container_name: spark-worker-2
+    hostname: spark-worker-2
+    environment:
+      <<: *spark-env
+      SPARK_WORKER_WEBUI_PORT: "8081"
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.worker.Worker
+      --webui-port 8081
+      spark://spark-master:7077
+    ports:
+      - "8082:8081"
+    <<: *spark-volumes
+    networks:
+      - spark-net
+    depends_on:
+      spark-master:
+        condition: service_healthy
+
+  spark-worker-3:
+    image: apache/spark:3.5.0
+    container_name: spark-worker-3
+    hostname: spark-worker-3
+    environment:
+      <<: *spark-env
+      SPARK_WORKER_WEBUI_PORT: "8081"
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.worker.Worker
+      --webui-port 8081
+      spark://spark-master:7077
+    ports:
+      - "8083:8081"
+    <<: *spark-volumes
+    networks:
+      - spark-net
+    depends_on:
+      spark-master:
+        condition: service_healthy
+
+  # ─── History Server ─────────────────────────────────────────────────────────
+  spark-history-server:
+    image: apache/spark:3.5.0
+    container_name: spark-history
+    hostname: spark-history
+    environment:
+      <<: *spark-env
+      SPARK_HISTORY_OPTS: >-
+        -Dspark.history.fs.logDirectory=file:///opt/spark/logs
+        -Dspark.history.ui.port=18080
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.history.HistoryServer
+    ports:
+      - "18080:18080"   # History Server Web UI
+    <<: *spark-volumes
+    networks:
+      - spark-net
+    depends_on:
+      - spark-master
+
+  # ─── Jupyter + PySpark ──────────────────────────────────────────────────────
+  jupyter:
+    image: jupyter/pyspark-notebook:spark-3.5.0
+    container_name: spark-jupyter
+    hostname: spark-jupyter
+    environment:
+      JUPYTER_ENABLE_LAB: "yes"
+      SPARK_MASTER: spark://spark-master:7077
+      PYSPARK_PYTHON: python3
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/jovyan/work
+      - ./data:/home/jovyan/data
+    networks:
+      - spark-net
+    depends_on:
+      spark-master:
+        condition: service_healthy
+
+networks:
+  spark-net:
+    driver: bridge
+    name: spark-net
+
