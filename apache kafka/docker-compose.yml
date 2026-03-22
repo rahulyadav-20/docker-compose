@@ -1,26 +1,27 @@
+
 services:
   # ──────────────────────────────────────────────
   # Zookeeper — coordination service for Kafka
   # ──────────────────────────────────────────────
-  zookeeper:
+  kafka-zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
-    container_name: zookeeper
-    hostname: zookeeper
+    container_name: kafka-zookeeper
+    hostname: kafka-zookeeper
     restart: unless-stopped
     ports:
-      - "2181:2181"
+      - "2182:2182"
     environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_CLIENT_PORT: 2182
       ZOOKEEPER_TICK_TIME: 2000
       ZOOKEEPER_INIT_LIMIT: 5
       ZOOKEEPER_SYNC_LIMIT: 2
     volumes:
-      - zookeeper-data:/var/lib/zookeeper/data
-      - zookeeper-logs:/var/lib/zookeeper/log
+      - kafka-zookeeper-data:/var/lib/zookeeper/data
+      - kafka-zookeeper-logs:/var/lib/zookeeper/log
     networks:
       - kafka-network
     healthcheck:
-      test: ["CMD", "bash", "-c", "echo srvr | nc localhost 2181 | grep -q Mode"]
+      test: ["CMD", "bash", "-c", "echo srvr | nc localhost 2182 | grep -q Mode"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -34,7 +35,7 @@ services:
     hostname: kafka
     restart: unless-stopped
     depends_on:
-      zookeeper:
+      kafka-zookeeper:
         condition: service_healthy
     ports:
       - "9092:9092"    # Internal listener
@@ -42,7 +43,7 @@ services:
       - "9101:9101"    # JMX
     environment:
       KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_ZOOKEEPER_CONNECT: "kafka-zookeeper:2182"
 
       # Listeners — internal (container-to-container) + external (host access)
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
@@ -72,7 +73,7 @@ services:
       KAFKA_JMX_HOSTNAME: localhost
 
       # Confluent metrics topic
-      KAFKA_CONFLUENT_SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
+      #KAFKA_CONFLUENT_SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
     volumes:
       - kafka-data:/var/lib/kafka/data
     networks:
@@ -86,127 +87,127 @@ services:
   # ──────────────────────────────────────────────
   # Schema Registry
   # ──────────────────────────────────────────────
-  schema-registry:
-    image: confluentinc/cp-schema-registry:7.6.0
-    container_name: schema-registry
-    hostname: schema-registry
-    restart: unless-stopped
-    depends_on:
-      kafka:
-        condition: service_healthy
-    ports:
-      - "8081:8081"
-    environment:
-      SCHEMA_REGISTRY_HOST_NAME: schema-registry
-      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: "kafka:9092"
-      SCHEMA_REGISTRY_LISTENERS: "http://0.0.0.0:8081"
-      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1
-      SCHEMA_REGISTRY_DEBUG: "true"
-    networks:
-      - kafka-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/subjects"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
+  # schema-registry:
+  #   image: confluentinc/cp-schema-registry:7.6.0
+  #   container_name: schema-registry
+  #   hostname: schema-registry
+  #   restart: unless-stopped
+  #   depends_on:
+  #     kafka:
+  #       condition: service_healthy
+  #   ports:
+  #     - "8081:8081"
+  #   environment:
+  #     SCHEMA_REGISTRY_HOST_NAME: schema-registry
+  #     SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: "kafka:9092"
+  #     SCHEMA_REGISTRY_LISTENERS: "http://0.0.0.0:8081"
+  #     SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1
+  #     SCHEMA_REGISTRY_DEBUG: "true"
+  #   networks:
+  #     - kafka-network
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8081/subjects"]
+  #     interval: 15s
+  #     timeout: 5s
+  #     retries: 10
 
   # ──────────────────────────────────────────────
   # Kafka Connect
   # ──────────────────────────────────────────────
-  kafka-connect:
-    image: confluentinc/cp-kafka-connect:7.6.0
-    container_name: kafka-connect
-    hostname: kafka-connect
-    restart: unless-stopped
-    depends_on:
-      kafka:
-        condition: service_healthy
-      schema-registry:
-        condition: service_healthy
-    ports:
-      - "8083:8083"
-    environment:
-      CONNECT_BOOTSTRAP_SERVERS: "kafka:9092"
-      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
-      CONNECT_REST_PORT: 8083
-      CONNECT_GROUP_ID: compose-connect-group
-      CONNECT_CONFIG_STORAGE_TOPIC: docker-connect-configs
-      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
-      CONNECT_OFFSET_FLUSH_INTERVAL_MS: 10000
-      CONNECT_OFFSET_STORAGE_TOPIC: docker-connect-offsets
-      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
-      CONNECT_STATUS_STORAGE_TOPIC: docker-connect-status
-      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
-      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
-      CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
-      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
-      CONNECT_INTERNAL_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-      CONNECT_INTERNAL_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-      CONNECT_ZOOKEEPER_CONNECT: "zookeeper:2181"
-      CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
-      CONNECT_LOG4J_LOGGERS: org.apache.zookeeper=ERROR,org.I0Itec.zkclient=ERROR,org.reflections=ERROR
-    volumes:
-      - ./connect-plugins:/usr/share/confluent-hub-components
-    networks:
-      - kafka-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8083/"]
-      interval: 20s
-      timeout: 10s
-      retries: 10
+  # kafka-connect:
+  #   image: confluentinc/cp-kafka-connect:7.6.0
+  #   container_name: kafka-connect
+  #   hostname: kafka-connect
+  #   restart: unless-stopped
+  #   depends_on:
+  #     kafka:
+  #       condition: service_healthy
+  #     schema-registry:
+  #       condition: service_healthy
+  #   ports:
+  #     - "8083:8083"
+  #   environment:
+  #     CONNECT_BOOTSTRAP_SERVERS: "kafka:9092"
+  #     CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
+  #     CONNECT_REST_PORT: 8083
+  #     CONNECT_GROUP_ID: compose-connect-group
+  #     CONNECT_CONFIG_STORAGE_TOPIC: docker-connect-configs
+  #     CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+  #     CONNECT_OFFSET_FLUSH_INTERVAL_MS: 10000
+  #     CONNECT_OFFSET_STORAGE_TOPIC: docker-connect-offsets
+  #     CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+  #     CONNECT_STATUS_STORAGE_TOPIC: docker-connect-status
+  #     CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+  #     CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+  #     CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
+  #     CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
+  #     CONNECT_INTERNAL_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+  #     CONNECT_INTERNAL_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+  #     CONNECT_ZOOKEEPER_CONNECT: "zookeeper:2182"
+  #     CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
+  #     CONNECT_LOG4J_LOGGERS: org.apache.zookeeper=ERROR,org.I0Itec.zkclient=ERROR,org.reflections=ERROR
+  #   volumes:
+  #     - ./connect-plugins:/usr/share/confluent-hub-components
+  #   networks:
+  #     - kafka-network
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8083/"]
+  #     interval: 20s
+  #     timeout: 10s
+  #     retries: 10
 
   # ──────────────────────────────────────────────
   # Confluent REST Proxy
   # ──────────────────────────────────────────────
-  rest-proxy:
-    image: confluentinc/cp-kafka-rest:7.6.0
-    container_name: rest-proxy
-    hostname: rest-proxy
-    restart: unless-stopped
-    depends_on:
-      kafka:
-        condition: service_healthy
-      schema-registry:
-        condition: service_healthy
-    ports:
-      - "8082:8082"
-    environment:
-      KAFKA_REST_HOST_NAME: rest-proxy
-      KAFKA_REST_BOOTSTRAP_SERVERS: "kafka:9092"
-      KAFKA_REST_LISTENERS: "http://0.0.0.0:8082"
-      KAFKA_REST_SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
-    networks:
-      - kafka-network
+  # rest-proxy:
+  #   image: confluentinc/cp-kafka-rest:7.6.0
+  #   container_name: rest-proxy
+  #   hostname: rest-proxy
+  #   restart: unless-stopped
+  #   depends_on:
+  #     kafka:
+  #       condition: service_healthy
+  #     # schema-registry:
+  #     #   condition: service_healthy
+  #   ports:
+  #     - "8084:8084"
+  #   environment:
+  #     KAFKA_REST_HOST_NAME: rest-proxy
+  #     KAFKA_REST_BOOTSTRAP_SERVERS: "kafka:9092"
+  #     KAFKA_REST_LISTENERS: "http://0.0.0.0:8083"
+  #     KAFKA_REST_SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
+  #   networks:
+  #     - kafka-network
 
   # ──────────────────────────────────────────────
   # Confluent Control Center
   # ──────────────────────────────────────────────
-  control-center:
-    image: confluentinc/cp-enterprise-control-center:7.6.0
-    container_name: control-center
-    hostname: control-center
-    restart: unless-stopped
-    depends_on:
-      kafka:
-        condition: service_healthy
-      schema-registry:
-        condition: service_healthy
-      kafka-connect:
-        condition: service_healthy
-    ports:
-      - "9021:9021"
-    environment:
-      CONTROL_CENTER_BOOTSTRAP_SERVERS: "kafka:9092"
-      CONTROL_CENTER_ZOOKEEPER_CONNECT: "zookeeper:2181"
-      CONTROL_CENTER_SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
-      CONTROL_CENTER_CONNECT_CONNECT-DEFAULT_CLUSTER: "http://kafka-connect:8083"
-      CONTROL_CENTER_REPLICATION_FACTOR: 1
-      CONTROL_CENTER_INTERNAL_TOPICS_PARTITIONS: 1
-      CONTROL_CENTER_MONITORING_INTERCEPTOR_TOPIC_PARTITIONS: 1
-      CONFLUENT_METRICS_TOPIC_REPLICATION: 1
-      PORT: 9021
-    networks:
-      - kafka-network
+  # control-center:
+  #   image: confluentinc/cp-enterprise-control-center:7.6.0
+  #   container_name: control-center
+  #   hostname: control-center
+  #   restart: unless-stopped
+  #   depends_on:
+  #     kafka:
+  #       condition: service_healthy
+  #     schema-registry:
+  #       condition: service_healthy
+  #     kafka-connect:
+  #       condition: service_healthy
+  #   ports:
+  #     - "9021:9021"
+  #   environment:
+  #     CONTROL_CENTER_BOOTSTRAP_SERVERS: "kafka:9092"
+  #     CONTROL_CENTER_ZOOKEEPER_CONNECT: "zookeeper:2182"
+  #     CONTROL_CENTER_SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
+  #     CONTROL_CENTER_CONNECT_CONNECT-DEFAULT_CLUSTER: "http://kafka-connect:8083"
+  #     CONTROL_CENTER_REPLICATION_FACTOR: 1
+  #     CONTROL_CENTER_INTERNAL_TOPICS_PARTITIONS: 1
+  #     CONTROL_CENTER_MONITORING_INTERCEPTOR_TOPIC_PARTITIONS: 1
+  #     CONFLUENT_METRICS_TOPIC_REPLICATION: 1
+  #     PORT: 9021
+  #   networks:
+  #     - kafka-network
 
   # ──────────────────────────────────────────────
   # Kafka UI — Provectus (lightweight web UI)
@@ -219,14 +220,14 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-      schema-registry:
-        condition: service_healthy
+      # schema-registry:
+      #   condition: service_healthy
     ports:
       - "8080:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: local-confluent
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
-      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      KAFKA_CLUSTERS_0_ZOOKEEPER: kafka-zookeeper:2182
       KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
       KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: connect
       KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://kafka-connect:8083
@@ -240,8 +241,8 @@ services:
 # Volumes
 # ──────────────────────────────────────────────
 volumes:
-  zookeeper-data:
-  zookeeper-logs:
+  kafka-zookeeper-data:
+  kafka-zookeeper-logs:
   kafka-data:
 
 # ──────────────────────────────────────────────
