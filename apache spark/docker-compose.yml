@@ -152,7 +152,6 @@ services:
     depends_on:
       spark-master:
         condition: service_healthy
-
 networks:
   spark-net:
     driver: bridge
