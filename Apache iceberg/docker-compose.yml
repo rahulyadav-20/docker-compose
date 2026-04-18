@@ -119,3 +119,5 @@ services:
 
 networks:
   iceberg_net:
+    external: true
+      

@@ -156,4 +156,6 @@ networks:
   spark-net:
     driver: bridge
     name: spark-net
+    external: true
+      
 

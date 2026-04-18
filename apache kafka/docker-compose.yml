@@ -252,3 +252,5 @@ networks:
   kafka-network:
     driver: bridge
     name: kafka-network
+    external: true
+      

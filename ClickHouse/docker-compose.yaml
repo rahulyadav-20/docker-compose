@@ -23,3 +23,7 @@ services:
 volumes:
   clickhouse_data:
   clickhouse_logs:
+
+networks:
+  clickhouse_net:
+    external: true

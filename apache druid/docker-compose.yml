@@ -139,3 +139,7 @@ services:
       - router
     env_file:
       - environment
+
+networks:
+  druid_net:
+    external: true
